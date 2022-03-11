@@ -32,7 +32,7 @@ class LossFunctions:
       return loss.sum(-1).mean()
 
 
-    def reconstruction_loss(self, real, predicted, rec_type='mse' ):
+    def reconstruction_loss(self, real, predicted, var_x, rec_type='mse' ):
       """Reconstruction loss between the true and predicted outputs
          mse = (1/n)*Σ(real - predicted)^2
          bce = (1/n) * -Σ(real*log(predicted) + (1 - real)*log(1 - predicted))
@@ -47,6 +47,7 @@ class LossFunctions:
       """
       if rec_type == 'mse':
         loss = (real - predicted).pow(2)
+        loss = 1/2*var_x*loss
       elif rec_type == 'bce':
         loss = F.binary_cross_entropy(predicted, real, reduction='none')
       else:

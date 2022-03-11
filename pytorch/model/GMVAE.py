@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 class GMVAE:
 
-  def __init__(self, args):
+  def __init__(self, args, psd, network, var_x):
     self.num_epochs = args.epochs
     self.cuda = args.cuda
     self.verbose = args.verbose
@@ -43,16 +43,19 @@ class GMVAE:
     self.min_temp = args.min_temp
     self.decay_temp_rate = args.decay_temp_rate
     self.gumbel_temp = self.init_temp
+    self.psd = psd
+    self.var_x = var_x
 
-    self.network = GMVAENet(self.input_size, self.gaussian_size, self.num_classes)
+    self.network = network
     self.losses = LossFunctions()
     self.metrics = Metrics()
 
+
     if self.cuda:
-      self.network = self.network.cuda() 
+      self.network = self.network.cuda()
   
 
-  def unlabeled_loss(self, data, out_net):
+  def unlabeled_loss(self, data, out_net, var_x):
     """Method defining the loss functions derived from the variational lower bound
     Args:
         data: (array) corresponding array containing the input data
@@ -66,9 +69,10 @@ class GMVAE:
     logits, prob_cat = out_net['logits'], out_net['prob_cat']
     y_mu, y_var = out_net['y_mean'], out_net['y_var']
     mu, var = out_net['mean'], out_net['var']
+    #print(self.var_x)
     
     # reconstruction loss
-    loss_rec = self.losses.reconstruction_loss(data, data_recon, self.rec_type)
+    loss_rec = self.losses.reconstruction_loss(data.view(data.size(0),-1), data_recon, self.var_x, self.rec_type)
 
     # gaussian loss
     loss_gauss = self.losses.gaussian_loss(z, mu, var, y_mu, y_var)
@@ -90,7 +94,7 @@ class GMVAE:
     return loss_dic
     
     
-  def train_epoch(self, optimizer, data_loader):
+  def train_epoch(self, optimizer, data_loader, var_x):
     """Train the model for one epoch
 
     Args:
@@ -122,10 +126,11 @@ class GMVAE:
 
       # flatten data
       data = data.view(data.size(0), -1)
+      #print(data.shape)
       
       # forward call
       out_net = self.network(data, self.gumbel_temp, self.hard_gumbel) 
-      unlab_loss_dic = self.unlabeled_loss(data, out_net) 
+      unlab_loss_dic = self.unlabeled_loss(data, out_net, var_x)
       total = unlab_loss_dic['total']
 
       # accumulate values
@@ -232,7 +237,7 @@ class GMVAE:
       return accuracy, nmi
 
 
-  def train(self, train_loader, val_loader):
+  def train(self, train_loader, val_loader, var_x, val_set_flag = False):
     """Train the model
 
     Args:
@@ -245,23 +250,33 @@ class GMVAE:
     optimizer = optim.Adam(self.network.parameters(), lr=self.learning_rate)
     train_history_acc, val_history_acc = [], []
     train_history_nmi, val_history_nmi = [], []
+    train_history_loss, train_history_rec, train_history_gauss, train_history_cat = [], [], [], []
+    val_history_loss, val_history_rec, val_history_gauss, val_history_cat = [], [], [], []
+
 
     for epoch in range(1, self.num_epochs + 1):
-      train_loss, train_rec, train_gauss, train_cat, train_acc, train_nmi = self.train_epoch(optimizer, train_loader)
-      val_loss, val_rec, val_gauss, val_cat, val_acc, val_nmi = self.test(val_loader, True)
+      train_loss, train_rec, train_gauss, train_cat, train_acc, train_nmi = self.train_epoch(optimizer, train_loader, self.var_x)
+      if val_set_flag == True:
+        val_loss, val_rec, val_gauss, val_cat, val_acc, val_nmi = self.test(val_loader, True)
 
       # if verbose then print specific information about training
       if self.verbose == 1:
         print("(Epoch %d / %d)" % (epoch, self.num_epochs) )
         print("Train - REC: %.5lf;  Gauss: %.5lf;  Cat: %.5lf;" % \
               (train_rec, train_gauss, train_cat))
-        print("Valid - REC: %.5lf;  Gauss: %.5lf;  Cat: %.5lf;" % \
-              (val_rec, val_gauss, val_cat))
-        print("Accuracy=Train: %.5lf; Val: %.5lf   NMI=Train: %.5lf; Val: %.5lf   Total Loss=Train: %.5lf; Val: %.5lf" % \
-              (train_acc, val_acc, train_nmi, val_nmi, train_loss, val_loss))
+        if val_set_flag == True:
+          print("Valid - REC: %.5lf;  Gauss: %.5lf;  Cat: %.5lf;" % \
+                (val_rec, val_gauss, val_cat))
+          print("Accuracy=Train: %.5lf; Val: %.5lf   NMI=Train: %.5lf; Val: %.5lf   Total Loss=Train: %.5lf; Val: %.5lf" % \
+                (train_acc, val_acc, train_nmi, val_nmi, train_loss, val_loss))
       else:
-        print('(Epoch %d / %d) Train_Loss: %.3lf; Val_Loss: %.3lf   Train_ACC: %.3lf; Val_ACC: %.3lf   Train_NMI: %.3lf; Val_NMI: %.3lf' % \
-              (epoch, self.num_epochs, train_loss, val_loss, train_acc, val_acc, train_nmi, val_nmi))
+        if val_set_flag == True:
+          print('(Epoch %d / %d) Train_Loss: %.3lf; Val_Loss: %.3lf   Train_ACC: %.3lf; Val_ACC: %.3lf   Train_NMI: %.3lf; Val_NMI: %.3lf' % \
+                (epoch, self.num_epochs, train_loss, val_loss, train_acc, val_acc, train_nmi, val_nmi))
+        else:
+          print(
+            '(Epoch %d / %d) Train_Loss: %.3lf' % \
+            (epoch, self.num_epochs, train_loss))
 
       # decay gumbel temperature
       if self.decay_temp == 1:
@@ -270,11 +285,29 @@ class GMVAE:
           print("Gumbel Temperature: %.3lf" % self.gumbel_temp)
 
       train_history_acc.append(train_acc)
-      val_history_acc.append(val_acc)
       train_history_nmi.append(train_nmi)
-      val_history_nmi.append(val_nmi)
-    return {'train_history_nmi' : train_history_nmi, 'val_history_nmi': val_history_nmi,
-            'train_history_acc': train_history_acc, 'val_history_acc': val_history_acc}
+      if val_set_flag == True:
+        val_history_nmi.append(val_nmi)
+        val_history_acc.append(val_acc)
+
+      train_history_loss.append(train_loss)
+      train_history_rec.append(train_rec)
+      train_history_cat.append(train_cat)
+      train_history_gauss.append(train_gauss)
+
+      if val_set_flag == True:
+        val_history_loss.append(val_loss)
+        val_history_rec.append(val_rec)
+        val_history_cat.append(val_cat)
+        val_history_gauss.append(val_gauss)
+
+    return {'train_history_nmi': train_history_nmi, 'val_history_nmi': val_history_nmi,
+            'train_history_acc': train_history_acc, 'val_history_acc': val_history_acc,
+            'train_history_loss': train_history_loss, 'train_history_rec': train_history_rec,
+            'train_history_cat': train_history_cat, 'train_history_gauss': train_history_gauss,
+            'val_history_loss': val_history_loss, 'val_history_rec': val_history_rec,
+            'val_history_cat': val_history_cat, 'val_history_gauss': val_history_gauss,
+            }
   
 
   def latent_features(self, data_loader, return_labels=False):
@@ -291,8 +324,20 @@ class GMVAE:
     N = len(data_loader.dataset)
     features = np.zeros((N, self.gaussian_size))
     if return_labels:
-      true_labels = np.zeros(N, dtype=np.int64)
+      #true_labels = data_loader.dataset.train_labels.cpu().numpy() #mnist
+      true_labels = data_loader.dataset.tensors[1] # HAR_ext
     start_ind = 0
+
+    with torch.no_grad():
+      x = data_loader.dataset.tensors[0]
+
+      data = x.view(x.size(0),-1)
+      out = self.network.inference(data.float(), self.gumbel_temp, self.hard_gumbel)
+      latent_feat = out['mean']
+
+      features = latent_feat.cpu().numpy()
+
+    '''
     with torch.no_grad():
       for (data, labels) in data_loader:
         if self.cuda == 1:
@@ -308,12 +353,14 @@ class GMVAE:
           true_labels[start_ind:end_ind] = labels.cpu().numpy()
         features[start_ind:end_ind] = latent_feat.cpu().detach().numpy()  
         start_ind += data.size(0)
+        
+    '''
     if return_labels:
-      return features, true_labels
-    return features
+      return features, out['categorical'], true_labels
+    return features, out['categorical']
 
 
-  def reconstruct_data(self, data_loader, sample_size=-1):
+  def reconstruct_data(self, data_loader, sample_size=945):
     """Reconstruct Data
 
     Args:
@@ -331,7 +378,7 @@ class GMVAE:
   
     # obtain values
     it = iter(test_random_loader)
-    test_batch_data, _ = it.next()
+    test_batch_data, labels = it.next()
     original = test_batch_data.data.numpy()
     if self.cuda:
       test_batch_data = test_batch_data.cuda()  
@@ -339,7 +386,7 @@ class GMVAE:
     # obtain reconstructed data  
     out = self.network(test_batch_data, self.gumbel_temp, self.hard_gumbel) 
     reconstructed = out['x_rec']
-    return original, reconstructed.data.cpu().numpy()
+    return original, reconstructed.data.cpu().numpy(), labels
 
 
   def plot_latent_space(self, data_loader, save=False):
