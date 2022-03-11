@@ -4,13 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6621dd6c-09ca-4bc5-bcfb-29d223cb781c" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/clustering.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/losses/LossFunctions.py" beforeDir="false" afterPath="$PROJECT_DIR$/losses/LossFunctions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/model/GMVAE.py" beforeDir="false" afterPath="$PROJECT_DIR$/model/GMVAE.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/networks/Networks.py" beforeDir="false" afterPath="$PROJECT_DIR$/networks/Networks.py" afterDir="false" />
-    </list>
+    <list default="true" id="6621dd6c-09ca-4bc5-bcfb-29d223cb781c" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -89,7 +83,7 @@
       <updated>1643898994276</updated>
       <workItem from="1643898996233" duration="44358000" />
       <workItem from="1644928957795" duration="33511000" />
-      <workItem from="1645697534129" duration="48456000" />
+      <workItem from="1645697534129" duration="48755000" />
     </task>
     <servers />
   </component>
